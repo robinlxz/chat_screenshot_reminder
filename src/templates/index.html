@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Screenshot Reminder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" class="max-w-4xl mx-auto py-8 px-4">
+        <header class="mb-8 flex justify-between items-center">
+            <h1 class="text-3xl font-bold text-blue-600">Reminders</h1>
+            <div class="flex gap-4">
+                <div class="bg-white px-4 py-2 rounded shadow-sm">
+                    <span class="text-sm text-gray-500">Pending:</span>
+                    <span class="font-bold text-blue-500 ml-2">[[ stats.pending ]]</span>
+                </div>
+                <div class="bg-white px-4 py-2 rounded shadow-sm">
+                    <span class="text-sm text-gray-500">Expired:</span>
+                    <span class="font-bold text-red-500 ml-2">[[ stats.expired ]]</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Upload Area -->
+        <div class="bg-white p-8 rounded-lg shadow-sm mb-8 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors text-center cursor-pointer relative"
+             @dragover.prevent="dragover = true"
+             @dragleave.prevent="dragover = false"
+             @drop.prevent="handleDrop"
+             :class="{'border-blue-500 bg-blue-50': dragover}">
+            <input type="file" ref="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" @change="handleFileSelect" accept="image/*">
+            <i data-lucide="upload-cloud" class="w-12 h-12 mx-auto text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-2">Click, drag, or press <kbd class="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-sm">Cmd+V</kbd> to upload</p>
+            <p class="text-sm text-gray-400">Supports JPG, PNG, GIF</p>
+            
+            <div v-if="uploading" class="mt-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-blue-600 h-2.5 rounded-full" style="width: 100%"></div>
+                </div>
+                <p class="text-sm text-blue-500 mt-2">Uploading...</p>
+            </div>
+        </div>
+
+        <!-- Reminders List -->
+        <div class="space-y-4">
+            <h2 class="text-xl font-semibold mb-4">All Reminders</h2>
+            <div v-if="reminders.length === 0" class="text-center py-12 text-gray-500 bg-white rounded-lg shadow-sm">
+                No reminders yet. Upload a screenshot to get started.
+            </div>
+            
+            <div v-for="item in reminders" :key="item.id" 
+                 class="bg-white p-4 rounded-lg shadow-sm flex items-start gap-4 transition hover:shadow-md cursor-pointer"
+                 @click="goToDetail(item.id)">
+                <!-- Thumbnail -->
+                <div class="w-24 h-24 flex-shrink-0 bg-gray-100 rounded overflow-hidden">
+                    <img :src="'/' + item.image_path" class="w-full h-full object-cover">
+                </div>
+                
+                <!-- Content -->
+                <div class="flex-grow">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            <span :class="getStatusBadgeClass(item.status)" class="px-2 py-1 rounded text-xs font-semibold uppercase">
+                                [[ item.status ]]
+                            </span>
+                            <span v-if="item.status === 'expired' && item.reminder_time" class="text-xs text-red-500 font-medium">
+                                [[ getOverdueText(item.reminder_time) ]]
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            Created: [[ formatDate(item.created_at) ]]
+                        </div>
+                    </div>
+                    
+                    <p class="text-gray-800 font-medium line-clamp-2 mb-2">
+                        <span v-if="item.status === 'processing'" class="text-gray-400 italic">Processing with AI...</span>
+                        <span v-else>[[ item.extracted_text || 'No text extracted' ]]</span>
+                    </p>
+                    
+                    <div class="text-sm text-gray-600 flex items-center gap-1">
+                        <i data-lucide="clock" class="w-4 h-4"></i>
+                        <span v-if="item.reminder_time" :class="{'text-red-500 font-semibold': item.status === 'expired'}">
+                            [[ formatDateTime(item.reminder_time) ]]
+                        </span>
+                        <span v-else-if="item.status === 'processing'" class="italic">Extracting time...</span>
+                        <span v-else class="italic text-yellow-600">No time extracted, please set manually</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, onUnmounted, computed } = Vue
+
+        const app = createApp({
+            setup() {
+                const reminders = ref([])
+                const dragover = ref(false)
+                const uploading = ref(false)
+                let pollInterval = null
+
+                const stats = computed(() => {
+                    return {
+                        pending: reminders.value.filter(r => r.status === 'pending').length,
+                        expired: reminders.value.filter(r => r.status === 'expired').length,
+                        completed: reminders.value.filter(r => r.status === 'completed').length,
+                    }
+                })
+
+                const fetchReminders = async () => {
+                    try {
+                        const res = await fetch('/api/reminders')
+                        if(res.ok) {
+                            const data = await res.json()
+                            reminders.value = data.reminders
+                        } else if(res.status === 401) {
+                            window.location.reload() // Will redirect to login
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch reminders', e)
+                    }
+                }
+
+                const handleFileSelect = (e) => {
+                    const file = e.target.files[0]
+                    if(file) uploadFile(file)
+                }
+
+                const handleDrop = (e) => {
+                    dragover.value = false
+                    const file = e.dataTransfer.files[0]
+                    if(file && file.type.startsWith('image/')) uploadFile(file)
+                }
+
+                const handlePaste = (e) => {
+                    const items = e.clipboardData.items
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf('image') !== -1) {
+                            const file = items[i].getAsFile()
+                            uploadFile(file)
+                            break
+                        }
+                    }
+                }
+
+                const uploadFile = async (file) => {
+                    uploading.value = true
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    
+                    try {
+                        const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        if(res.ok) {
+                            await fetchReminders()
+                        }
+                    } catch(e) {
+                        console.error('Upload failed', e)
+                        alert('Upload failed')
+                    } finally {
+                        uploading.value = false
+                    }
+                }
+
+                const goToDetail = (id) => {
+                    window.location.href = `/reminder/${id}`
+                }
+
+                const getStatusBadgeClass = (status) => {
+                    const map = {
+                        'processing': 'bg-gray-100 text-gray-600',
+                        'pending': 'bg-blue-100 text-blue-600',
+                        'expired': 'bg-red-100 text-red-600',
+                        'completed': 'bg-green-100 text-green-600',
+                        'snoozed': 'bg-yellow-100 text-yellow-600'
+                    }
+                    return map[status] || 'bg-gray-100 text-gray-600'
+                }
+
+                const formatDate = (isoString) => {
+                    if(!isoString) return ''
+                    const d = new Date(isoString + 'Z')
+                    return d.toLocaleDateString()
+                }
+
+                const formatDateTime = (isoString) => {
+                    if(!isoString) return ''
+                    const d = new Date(isoString + 'Z')
+                    return d.toLocaleString()
+                }
+
+                const getOverdueText = (isoString) => {
+                    if(!isoString) return ''
+                    const target = new Date(isoString + 'Z').getTime()
+                    const now = new Date().getTime()
+                    const diffMs = now - target
+                    
+                    if(diffMs <= 0) return ''
+                    
+                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+                    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+                    
+                    if(diffHours > 0) return `(Overdue ${diffHours}h ${diffMins}m)`
+                    return `(Overdue ${diffMins}m)`
+                }
+
+                onMounted(() => {
+                    fetchReminders()
+                    pollInterval = setInterval(fetchReminders, 10000) // Poll every 10s
+                    // Add global paste event listener
+                    document.addEventListener('paste', handlePaste)
+                    // Re-initialize lucide icons after rendering
+                    setTimeout(() => lucide.createIcons(), 100)
+                })
+
+                onUnmounted(() => {
+                    if(pollInterval) clearInterval(pollInterval)
+                    document.removeEventListener('paste', handlePaste)
+                })
+
+                return {
+                    reminders, stats, dragover, uploading,
+                    handleFileSelect, handleDrop, goToDetail,
+                    getStatusBadgeClass, formatDate, formatDateTime, getOverdueText
+                }
+            }
+        })
+        
+        app.config.compilerOptions.delimiters = ['[[', ']]']
+        app.mount('#app')
+    </script>
+</body>
+</html>
