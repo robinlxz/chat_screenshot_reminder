@@ -37,6 +37,7 @@ async def extract_reminder_info(image_path: str) -> dict:
         Specifically, please identify:
         1. The Chat Group Name or Title (if visible, e.g., at the top header).
         2. The core request, question, or action item mentioned in the chat.
+        IMPORTANT: If there are multiple questions or messages in the screenshot, focus ONLY on identifying and extracting the LAST (bottom-most) question or action item in the conversation thread.
         
         Please return a JSON object with the following keys:
         - "extracted_text": A clear summary. Format it like: "[Group Name] Sender asks: ..." or include specific details (e.g., "UID XXXXX requires CDN activation").

@@ -48,7 +48,7 @@ User=$USER
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$VENV_DIR/bin"
 EnvironmentFile=$PROJECT_DIR/.env
-ExecStart=$UVICORN_CMD src.main:app --host 0.0.0.0 --port \${PORT:-80}
+ExecStart=$UVICORN_CMD src.main:app --host 0.0.0.0 --port \${PORT}
 Restart=always
 RestartSec=5
 

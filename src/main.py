@@ -98,16 +98,21 @@ async def process_image_background(reminder_id: str, image_path: str, db: Sessio
 async def login(request: Request):
     data = await request.json()
     password = data.get("password")
+    username = data.get("username", "anonymous").lower()
+    
     if password == APP_PASSWORD:
         response = JSONResponse(content={"success": True})
         response.set_cookie(key="access_code", value=password, httponly=True, max_age=3600*24*30)
+        response.set_cookie(key="username", value=username, httponly=True, max_age=3600*24*30)
         return response
     return JSONResponse(status_code=401, content={"success": False, "message": "Invalid password"})
 
 @app.post("/api/upload")
-async def upload_image(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_image(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
+    
+    username = request.cookies.get("username", "anonymous")
     
     # Save file
     timestamp = datetime.now().strftime("%Y%md%H%M%S")
@@ -120,7 +125,10 @@ async def upload_image(background_tasks: BackgroundTasks, file: UploadFile = Fil
     logger.info(f"[Upload] Received image: {filename}, size: {os.path.getsize(file_path)} bytes")
         
     # Create DB entry
-    reminder = Reminder(image_path=str(file_path.relative_to(BASE_DIR)))
+    reminder = Reminder(
+        image_path=str(file_path.relative_to(BASE_DIR)),
+        user_id=username
+    )
     db.add(reminder)
     db.commit()
     db.refresh(reminder)
@@ -131,8 +139,14 @@ async def upload_image(background_tasks: BackgroundTasks, file: UploadFile = Fil
     return {"success": True, "reminder_id": reminder.id, "message": "Image uploaded, processing started"}
 
 @app.get("/api/reminders")
-async def get_reminders(db: Session = Depends(get_db)):
-    reminders = db.query(Reminder).order_by(Reminder.created_at.desc()).all()
+async def get_reminders(request: Request, db: Session = Depends(get_db)):
+    username = request.cookies.get("username", "anonymous")
+    
+    query = db.query(Reminder)
+    if username != "admin":
+        query = query.filter(Reminder.user_id == username)
+        
+    reminders = query.order_by(Reminder.created_at.desc()).all()
     return {"reminders": [r.to_dict() for r in reminders], "total": len(reminders)}
 
 @app.get("/api/reminder/{id}")
