@@ -1,7 +1,7 @@
 import os
 import shutil
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -75,17 +75,22 @@ async def process_image_background(reminder_id: str, image_path: str, db: Sessio
                 try:
                     # Basic ISO parsing
                     reminder.reminder_time = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-                    reminder.status = "pending"
                 except ValueError:
                     logger.warning(f"Invalid time format returned from LLM: {time_str}")
-                    reminder.status = "pending" # Needs manual time set
+                    reminder.reminder_time = datetime.utcnow() + timedelta(hours=1)
             else:
-                reminder.status = "pending" # Needs manual time set
+                reminder.reminder_time = datetime.utcnow() + timedelta(hours=1)
                 
+            reminder.status = "pending"
             db.commit()
     except Exception as e:
         logger.error(f"Error in background processing: {e}")
-        # Could set status to error, but for MVP keep it simple
+        reminder = db.query(Reminder).filter(Reminder.id == reminder_id).first()
+        if reminder:
+            reminder.extracted_text = f"⚠️ System Error: {str(e)}"
+            reminder.reminder_time = datetime.utcnow()
+            reminder.status = "pending"
+            db.commit()
 
 # --- API Endpoints ---
 
@@ -111,6 +116,8 @@ async def upload_image(background_tasks: BackgroundTasks, file: UploadFile = Fil
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+        
+    logger.info(f"[Upload] Received image: {filename}, size: {os.path.getsize(file_path)} bytes")
         
     # Create DB entry
     reminder = Reminder(image_path=str(file_path.relative_to(BASE_DIR)))

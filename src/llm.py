@@ -33,11 +33,14 @@ async def extract_reminder_info(image_path: str) -> dict:
         
         prompt = """
         Analyze this chat screenshot and extract the most important information that needs a reminder.
-        Also, extract the specific time mentioned for the reminder, if any.
+        
+        Specifically, please identify:
+        1. The Chat Group Name or Title (if visible, e.g., at the top header).
+        2. The core request, question, or action item mentioned in the chat.
         
         Please return a JSON object with the following keys:
-        - "extracted_text": A summary of the main point or action item (string).
-        - "reminder_time": The specific time mentioned in the format "YYYY-MM-DDTHH:MM:SS" (string, ISO 8601). If no explicit date is mentioned, assume it's relative to the current time, or return null if it's completely unclear. For this task, if it just says "tomorrow at 10", calculate based on current time (just do your best to provide a valid ISO string, or null).
+        - "extracted_text": A clear summary. Format it like: "[Group Name] Sender asks: ..." or include specific details (e.g., "UID XXXXX requires CDN activation").
+        - "reminder_time": The specific time mentioned in the format "YYYY-MM-DDTHH:MM:SS" (string, ISO 8601). If no explicit date/time is mentioned, return null.
         
         ONLY output valid JSON. Do not include any other text or markdown formatting.
         """
@@ -65,6 +68,8 @@ async def extract_reminder_info(image_path: str) -> dict:
         content = response.choices[0].message.content
         result = json.loads(content)
         
+        logger.info(f"[LLM Extraction] Image: {image_path} -> Result: {json.dumps(result, ensure_ascii=False)}")
+        
         return {
             "extracted_text": result.get("extracted_text", "No text extracted"),
             "reminder_time": result.get("reminder_time", None)
@@ -72,6 +77,6 @@ async def extract_reminder_info(image_path: str) -> dict:
     except Exception as e:
         logger.error(f"Error calling Vision API: {e}")
         return {
-            "extracted_text": f"Error extracting text: {str(e)}",
+            "extracted_text": f"⚠️ AI Parsing Failed: {str(e)}",
             "reminder_time": None
         }
