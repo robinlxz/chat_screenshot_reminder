@@ -12,16 +12,20 @@
 <body class="bg-gray-50 min-h-screen">
     <div id="app" class="max-w-4xl mx-auto py-8 px-4">
         <header class="mb-8 flex justify-between items-center">
-            <h1 class="text-3xl font-bold text-blue-600">Reminders</h1>
-            <div class="flex gap-4">
-                <div class="bg-white px-4 py-2 rounded shadow-sm">
-                    <span class="text-sm text-gray-500">Pending:</span>
+            <h1 class="text-3xl font-bold text-blue-600">[[ t('title') ]]</h1>
+            <div class="flex gap-4 items-center">
+                <div class="bg-white px-4 py-2 rounded shadow-sm hidden md:block">
+                    <span class="text-sm text-gray-500">[[ t('pending') ]]</span>
                     <span class="font-bold text-blue-500 ml-2">[[ stats.pending ]]</span>
                 </div>
-                <div class="bg-white px-4 py-2 rounded shadow-sm">
-                    <span class="text-sm text-gray-500">Expired:</span>
+                <div class="bg-white px-4 py-2 rounded shadow-sm hidden md:block">
+                    <span class="text-sm text-gray-500">[[ t('expired') ]]</span>
                     <span class="font-bold text-red-500 ml-2">[[ stats.expired ]]</span>
                 </div>
+                <!-- Settings Button -->
+                <button @click="showSettings = true" class="p-2 hover:bg-gray-200 rounded-full transition bg-white shadow-sm ml-2" title="Settings">
+                    <i data-lucide="settings" class="w-5 h-5 text-gray-600"></i>
+                </button>
             </div>
         </header>
 
@@ -33,22 +37,22 @@
              :class="{'border-blue-500 bg-blue-50': dragover}">
             <input type="file" ref="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" @change="handleFileSelect" accept="image/*">
             <i data-lucide="upload-cloud" class="w-12 h-12 mx-auto text-gray-400 mb-4"></i>
-            <p class="text-gray-600 mb-2">Click, drag, or press <kbd class="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-sm">Cmd+V</kbd> to upload</p>
-            <p class="text-sm text-gray-400">Supports JPG, PNG, GIF</p>
+            <p class="text-gray-600 mb-2">[[ t('uploadText1') ]] <kbd class="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-sm">Cmd+V</kbd> [[ t('uploadText2') ]]</p>
+            <p class="text-sm text-gray-400">[[ t('uploadSub') ]]</p>
             
             <div v-if="uploading" class="mt-4">
                 <div class="w-full bg-gray-200 rounded-full h-2.5">
                     <div class="bg-blue-600 h-2.5 rounded-full" style="width: 100%"></div>
                 </div>
-                <p class="text-sm text-blue-500 mt-2">Uploading...</p>
+                <p class="text-sm text-blue-500 mt-2">[[ t('uploading') ]]</p>
             </div>
         </div>
 
         <!-- Reminders List -->
         <div class="space-y-4">
-            <h2 class="text-xl font-semibold mb-4">All Reminders</h2>
+            <h2 class="text-xl font-semibold mb-4">[[ t('allReminders') ]]</h2>
             <div v-if="reminders.length === 0" class="text-center py-12 text-gray-500 bg-white rounded-lg shadow-sm">
-                No reminders yet. Upload a screenshot to get started.
+                [[ t('noReminders') ]]
             </div>
             
             <div v-for="item in reminders" :key="item.id" 
@@ -64,20 +68,20 @@
                     <div class="flex justify-between items-start mb-2">
                         <div class="flex items-center gap-2">
                             <span :class="getStatusBadgeClass(item.status)" class="px-2 py-1 rounded text-xs font-semibold uppercase">
-                                [[ item.status ]]
+                                [[ getStatusText(item.status) ]]
                             </span>
                             <span v-if="item.status === 'expired' && item.reminder_time" class="text-xs text-red-500 font-medium">
                                 [[ getOverdueText(item.reminder_time) ]]
                             </span>
                         </div>
                         <div class="text-sm text-gray-500">
-                            Created: [[ formatDate(item.created_at) ]]
+                            [[ t('created') ]] [[ formatDate(item.created_at) ]]
                         </div>
                     </div>
                     
                     <p class="text-gray-800 font-medium line-clamp-2 mb-2">
-                        <span v-if="item.status === 'processing'" class="text-gray-400 italic">Processing with AI...</span>
-                        <span v-else>[[ item.extracted_text || 'No text extracted' ]]</span>
+                        <span v-if="item.status === 'processing'" class="text-gray-400 italic">[[ t('processing') ]]</span>
+                        <span v-else>[[ item.extracted_text || t('noText') ]]</span>
                     </p>
                     
                     <div class="text-sm text-gray-600 flex items-center gap-1">
@@ -85,8 +89,44 @@
                         <span v-if="item.reminder_time" :class="{'text-red-500 font-semibold': item.status === 'expired'}">
                             [[ formatDateTime(item.reminder_time) ]]
                         </span>
-                        <span v-else-if="item.status === 'processing'" class="italic">Extracting time...</span>
-                        <span v-else class="italic text-yellow-600">No time extracted, please set manually</span>
+                        <span v-else-if="item.status === 'processing'" class="italic">[[ t('notExtracting') ]]</span>
+                        <span v-else class="italic text-yellow-600">[[ t('noTime') ]]</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-w-full">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">[[ t('settings') ]]</h3>
+                    <button @click="showSettings = false" class="text-gray-500 hover:text-gray-700">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Current User -->
+                    <div class="flex justify-between items-center border-b pb-4">
+                        <span class="text-gray-700 font-medium">[[ t('currentUser') ]]</span>
+                        <span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">{{ username }}</span>
+                    </div>
+
+                    <!-- Language Toggle -->
+                    <div class="flex justify-between items-center border-b pb-4">
+                        <span class="text-gray-700 font-medium">[[ t('language') ]]</span>
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button @click="setLang('en')" :class="{'bg-white shadow-sm text-blue-600': lang === 'en', 'text-gray-500': lang !== 'en'}" class="px-3 py-1 rounded-md text-sm font-medium transition">EN</button>
+                            <button @click="setLang('zh')" :class="{'bg-white shadow-sm text-blue-600': lang === 'zh', 'text-gray-500': lang !== 'zh'}" class="px-3 py-1 rounded-md text-sm font-medium transition">中文</button>
+                        </div>
+                    </div>
+
+                    <!-- Logout -->
+                    <div class="pt-2">
+                        <button @click="logout" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2 px-4 rounded transition flex items-center justify-center gap-2">
+                            <i data-lucide="log-out" class="w-4 h-4"></i> [[ t('logout') ]]
+                        </button>
                     </div>
                 </div>
             </div>
@@ -96,12 +136,76 @@
     <script>
         const { createApp, ref, onMounted, onUnmounted, computed } = Vue
 
+        const locales = {
+            en: {
+                title: 'Reminders',
+                pending: 'Pending',
+                expired: 'Expired',
+                uploadText1: 'Click, drag, or press',
+                uploadText2: 'to upload',
+                uploadSub: 'Supports JPG, PNG, GIF',
+                uploading: 'Uploading...',
+                allReminders: 'All Reminders',
+                noReminders: 'No reminders yet. Upload a screenshot to get started.',
+                created: 'Created:',
+                processing: 'Processing with AI...',
+                noText: 'No text extracted',
+                notExtracting: 'Extracting time...',
+                noTime: 'No time extracted, please set manually',
+                settings: 'Settings',
+                language: 'Language',
+                currentUser: 'Current User',
+                logout: 'Log Out',
+                status_processing: 'PROCESSING',
+                status_pending: 'PENDING',
+                status_expired: 'EXPIRED',
+                status_completed: 'COMPLETED',
+                status_snoozed: 'SNOOZED',
+                overdue: 'Overdue'
+            },
+            zh: {
+                title: '提醒事项',
+                pending: '待处理',
+                expired: '已过期',
+                uploadText1: '点击、拖拽或按',
+                uploadText2: '上传截图',
+                uploadSub: '支持 JPG, PNG, GIF 格式',
+                uploading: '上传中...',
+                allReminders: '所有提醒',
+                noReminders: '暂无提醒。请上传截图开始使用。',
+                created: '创建于:',
+                processing: 'AI 正在处理...',
+                noText: '未提取到文本',
+                notExtracting: '正在提取时间...',
+                noTime: '未提取到时间，请手动设置',
+                settings: '设置与配置',
+                language: '语言 (Language)',
+                currentUser: '当前花名',
+                logout: '退出登录',
+                status_processing: '处理中',
+                status_pending: '倒计时中',
+                status_expired: '已超时',
+                status_completed: '已完成',
+                status_snoozed: '已延后',
+                overdue: '超时'
+            }
+        }
+
         const app = createApp({
             setup() {
                 const reminders = ref([])
                 const dragover = ref(false)
                 const uploading = ref(false)
+                const showSettings = ref(false)
+                const lang = ref(localStorage.getItem('lang') || 'zh')
                 let pollInterval = null
+
+                const t = (key) => locales[lang.value][key] || key
+
+                const setLang = (l) => {
+                    lang.value = l
+                    localStorage.setItem('lang', l)
+                }
 
                 const stats = computed(() => {
                     return {
@@ -183,6 +287,10 @@
                     return map[status] || 'bg-gray-100 text-gray-600'
                 }
 
+                const getStatusText = (status) => {
+                    return t(`status_${status}`)
+                }
+
                 const formatDate = (isoString) => {
                     if(!isoString) return ''
                     const d = new Date(isoString + 'Z')
@@ -206,16 +314,26 @@
                     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
                     const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
                     
-                    if(diffHours > 0) return `(Overdue ${diffHours}h ${diffMins}m)`
-                    return `(Overdue ${diffMins}m)`
+                    const prefix = t('overdue')
+                    if(diffHours > 0) return `(${prefix} ${diffHours}h ${diffMins}m)`
+                    return `(${prefix} ${diffMins}m)`
+                }
+
+                const logout = async () => {
+                    if(confirm(lang.value === 'zh' ? '确定要退出登录吗？' : 'Are you sure you want to log out?')) {
+                        try {
+                            const res = await fetch('/api/logout', { method: 'POST' })
+                            if (res.ok) window.location.reload()
+                        } catch(e) {
+                            console.error(e)
+                        }
+                    }
                 }
 
                 onMounted(() => {
                     fetchReminders()
                     pollInterval = setInterval(fetchReminders, 10000) // Poll every 10s
-                    // Add global paste event listener
                     document.addEventListener('paste', handlePaste)
-                    // Re-initialize lucide icons after rendering
                     setTimeout(() => lucide.createIcons(), 100)
                 })
 
@@ -225,9 +343,10 @@
                 })
 
                 return {
-                    reminders, stats, dragover, uploading,
+                    reminders, stats, dragover, uploading, showSettings, lang,
                     handleFileSelect, handleDrop, goToDetail,
-                    getStatusBadgeClass, formatDate, formatDateTime, getOverdueText
+                    getStatusBadgeClass, getStatusText, formatDate, formatDateTime, getOverdueText,
+                    t, setLang, logout
                 }
             }
         })

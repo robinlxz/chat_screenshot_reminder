@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends, UploadFile, File, BackgroundTasks, HTTPExc
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.config import UPLOAD_DIR, APP_PASSWORD, ENABLE_DOCS, BASE_DIR
@@ -45,11 +46,11 @@ async def verify_access_code(request: Request, call_next):
     # Only protect specific paths if APP_PASSWORD is set
     if APP_PASSWORD:
         path = request.url.path
-        if path.startswith("/api/") or path == "/" or path.startswith("/reminder/"):
+        if path.startswith("/api/") or path == "/" or path.startswith("/reminder/") or path == "/stats":
             # Check for header or cookie
             code = request.headers.get("X-Access-Code") or request.cookies.get("access_code")
-            if path == "/" and code != APP_PASSWORD:
-                # Render login page if visiting home without access code
+            if (path == "/" or path == "/stats") and code != APP_PASSWORD:
+                # Render login page if visiting protected pages without access code
                 return templates.TemplateResponse(request=request, name="login.html")
             elif path.startswith("/api/") and code != APP_PASSWORD:
                 if path == "/api/login":
@@ -107,6 +108,13 @@ async def login(request: Request):
         return response
     return JSONResponse(status_code=401, content={"success": False, "message": "Invalid password"})
 
+@app.post("/api/logout")
+async def logout():
+    response = JSONResponse(content={"success": True})
+    response.delete_cookie(key="access_code")
+    response.delete_cookie(key="username")
+    return response
+
 @app.post("/api/upload")
 async def upload_image(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.content_type.startswith("image/"):
@@ -138,7 +146,21 @@ async def upload_image(request: Request, background_tasks: BackgroundTasks, file
     
     return {"success": True, "reminder_id": reminder.id, "message": "Image uploaded, processing started"}
 
-@app.get("/api/reminders")
+@app.get("/api/stats")
+async def get_stats(request: Request, db: Session = Depends(get_db)):
+    username = request.cookies.get("username", "anonymous")
+    if username != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    stats = db.query(Reminder.user_id, func.count(Reminder.id).label("task_count")).group_by(Reminder.user_id).all()
+    
+    # Optional: Get unique users (not just those with tasks, though in our DB they are the same)
+    # Since we only save user_id in Reminder table, we query that.
+    
+    result = [
+        {"nickname": s[0], "task_count": s[1]} for s in stats
+    ]
+    return {"stats": result}
 async def get_reminders(request: Request, db: Session = Depends(get_db)):
     username = request.cookies.get("username", "anonymous")
     
@@ -190,8 +212,15 @@ async def delete_reminder(id: str, db: Session = Depends(get_db)):
 # --- HTML Views ---
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    username = request.cookies.get("username", "anonymous")
+    return templates.TemplateResponse(request=request, name="index.html", context={"username": username})
 
-@app.get("/reminder/{id}", response_class=HTMLResponse)
+@app.get("/stats", response_class=HTMLResponse)
+async def stats_dashboard(request: Request):
+    username = request.cookies.get("username", "anonymous")
+    if username != "admin":
+        return HTMLResponse(content="<h1>403 Forbidden</h1><p>You must be 'admin' to view this page.</p>", status_code=403)
+    return templates.TemplateResponse(request=request, name="stats.html", context={"username": username})
 async def reminder_detail(request: Request, id: str):
-    return templates.TemplateResponse(request=request, name="detail.html", context={"id": id})
+    username = request.cookies.get("username", "anonymous")
+    return templates.TemplateResponse(request=request, name="detail.html", context={"id": id, "username": username})

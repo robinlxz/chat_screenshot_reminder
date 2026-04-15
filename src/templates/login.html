@@ -5,61 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Chat Screenshot Reminder</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
 <body class="bg-gray-100 h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 class="text-2xl font-bold mb-6 text-center text-blue-600">Reminder Login</h1>
+    <div id="app" class="bg-white p-8 rounded-lg shadow-md w-96 relative">
+        <!-- Language Switcher -->
+        <button @click="toggleLang" class="absolute top-4 right-4 text-sm text-gray-500 hover:text-blue-500 font-medium">
+            [[ lang === 'en' ? '中文' : 'EN' ]]
+        </button>
+
+        <h1 class="text-2xl font-bold mb-6 text-center text-blue-600">[[ t('title') ]]</h1>
+        
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2" for="username">
-                Your Nickname
+                [[ t('nicknameLabel') ]]
             </label>
-            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="username" type="text" placeholder="e.g. Lindy (use 'admin' to see all)">
+            <input v-model="username" @keypress.enter="login" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="username" type="text" :placeholder="t('nicknamePlaceholder')">
         </div>
+        
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
-                Access Code
+                [[ t('accessCodeLabel') ]]
             </label>
-            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="password" type="password" placeholder="Enter Access Code">
-            <p id="error-msg" class="text-red-500 text-xs italic hidden">Invalid access code.</p>
+            <input v-model="password" @keypress.enter="login" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="password" type="password" :placeholder="t('accessCodePlaceholder')">
+            <p v-if="error" class="text-red-500 text-xs italic">[[ t('errorMsg') ]]</p>
         </div>
-        <div class="flex items-center justify-between">
-            <button id="login-btn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full" type="button">
-                Login
+        
+        <div class="flex items-center justify-between mt-6">
+            <button @click="login" :disabled="loading" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:opacity-50 transition-colors" type="button">
+                [[ loading ? t('loggingIn') : t('loginBtn') ]]
             </button>
         </div>
     </div>
 
     <script>
-        document.getElementById('login-btn').addEventListener('click', async () => {
-            const password = document.getElementById('password').value;
-            const username = document.getElementById('username').value.trim() || 'anonymous';
-            const errorMsg = document.getElementById('error-msg');
-            
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ password, username })
-                });
-                
-                if (res.ok) {
-                    window.location.reload();
-                } else {
-                    errorMsg.classList.remove('hidden');
-                }
-            } catch (err) {
-                console.error(err);
-                errorMsg.classList.remove('hidden');
-            }
-        });
+        const { createApp, ref, computed } = Vue
 
-        document.getElementById('password').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                document.getElementById('login-btn').click();
+        const locales = {
+            en: {
+                title: 'Reminder Login',
+                nicknameLabel: 'Your Nickname',
+                nicknamePlaceholder: "e.g. Lindy (use 'admin' to see all)",
+                accessCodeLabel: 'Access Code',
+                accessCodePlaceholder: 'Enter Access Code',
+                loginBtn: 'Login',
+                loggingIn: 'Logging in...',
+                errorMsg: 'Invalid access code.'
+            },
+            zh: {
+                title: '提醒工具登录',
+                nicknameLabel: '你的花名 (Nickname)',
+                nicknamePlaceholder: "例如: Lindy (输入 admin 查看所有)",
+                accessCodeLabel: '访问密码 (Access Code)',
+                accessCodePlaceholder: '请输入访问密码',
+                loginBtn: '登 录',
+                loggingIn: '登录中...',
+                errorMsg: '访问密码错误。'
             }
-        });
+        }
+
+        const app = createApp({
+            setup() {
+                const lang = ref(localStorage.getItem('lang') || 'zh')
+                const username = ref('')
+                const password = ref('')
+                const error = ref(false)
+                const loading = ref(false)
+
+                const t = (key) => locales[lang.value][key]
+
+                const toggleLang = () => {
+                    lang.value = lang.value === 'en' ? 'zh' : 'en'
+                    localStorage.setItem('lang', lang.value)
+                }
+
+                const login = async () => {
+                    if (!password.value) return
+                    
+                    error.value = false
+                    loading.value = true
+                    
+                    const finalUsername = username.value.trim() || 'anonymous'
+                    
+                    try {
+                        const res = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                password: password.value, 
+                                username: finalUsername 
+                            })
+                        })
+                        
+                        if (res.ok) {
+                            window.location.reload()
+                        } else {
+                            error.value = true
+                        }
+                    } catch (err) {
+                        console.error(err)
+                        error.value = true
+                    } finally {
+                        loading.value = false
+                    }
+                }
+
+                return {
+                    lang, username, password, error, loading,
+                    t, toggleLang, login
+                }
+            }
+        })
+        
+        app.config.compilerOptions.delimiters = ['[[', ']]']
+        app.mount('#app')
     </script>
 </body>
 </html>
