@@ -161,6 +161,8 @@ async def get_stats(request: Request, db: Session = Depends(get_db)):
         {"nickname": s[0], "task_count": s[1]} for s in stats
     ]
     return {"stats": result}
+
+@app.get("/api/reminders")
 async def get_reminders(request: Request, db: Session = Depends(get_db)):
     username = request.cookies.get("username", "anonymous")
     
@@ -221,6 +223,8 @@ async def stats_dashboard(request: Request):
     if username != "admin":
         return HTMLResponse(content="<h1>403 Forbidden</h1><p>You must be 'admin' to view this page.</p>", status_code=403)
     return templates.TemplateResponse(request=request, name="stats.html", context={"username": username})
+
+@app.get("/reminder/{id}", response_class=HTMLResponse)
 async def reminder_detail(request: Request, id: str):
     username = request.cookies.get("username", "anonymous")
     return templates.TemplateResponse(request=request, name="detail.html", context={"id": id, "username": username})
