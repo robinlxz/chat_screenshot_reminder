@@ -16,11 +16,30 @@ if [ ! -f "$PROJECT_DIR/.env" ]; then
     exit 1
 fi
 
-# 2. Create and activate virtual environment
-echo "Setting up virtual environment..."
-if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
+# 2. Check and Setup Virtual Environment
+echo "Checking Python virtual environment..."
+if [ -n "$VIRTUAL_ENV" ]; then
+    echo "Notice: You are currently in a virtual environment ($VIRTUAL_ENV)."
+    echo "deploy.sh will use the project-specific venv at $VENV_DIR instead."
 fi
+
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating new virtual environment at $VENV_DIR to isolate dependencies..."
+    if ! command -v python3 &> /dev/null; then
+        echo "Error: python3 is not installed. Please install it first."
+        exit 1
+    fi
+    
+    if ! python3 -m venv "$VENV_DIR"; then
+        echo "Error: Failed to create virtual environment."
+        echo "Note: On some systems (like Ubuntu/Debian), you may need to run 'sudo apt install python3-venv' first."
+        exit 1
+    fi
+    echo "Virtual environment created successfully."
+else
+    echo "Using existing virtual environment at $VENV_DIR."
+fi
+
 source "$VENV_DIR/bin/activate"
 
 # 3. Install dependencies
