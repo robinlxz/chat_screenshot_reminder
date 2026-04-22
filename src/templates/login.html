@@ -28,7 +28,7 @@
                 [[ t('accessCodeLabel') ]]
             </label>
             <input v-model="password" @keypress.enter="login" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="password" type="password" :placeholder="t('accessCodePlaceholder')">
-            <p v-if="error" class="text-red-500 text-xs italic">[[ t('errorMsg') ]]</p>
+            <p v-if="error" class="text-red-500 text-xs italic">[[ error ]]</p>
         </div>
         
         <div class="flex items-center justify-between mt-6">
@@ -69,7 +69,7 @@
                 const lang = ref(localStorage.getItem('lang') || 'zh')
                 const username = ref('')
                 const password = ref('')
-                const error = ref(false)
+                const error = ref('')
                 const loading = ref(false)
 
                 const t = (key) => locales[lang.value][key]
@@ -82,7 +82,7 @@
                 const login = async () => {
                     if (!password.value) return
                     
-                    error.value = false
+                    error.value = ''
                     loading.value = true
                     
                     const finalUsername = username.value.trim() || 'anonymous'
@@ -100,11 +100,12 @@
                         if (res.ok) {
                             window.location.reload()
                         } else {
-                            error.value = true
+                            const data = await res.json().catch(() => ({}))
+                            error.value = data.message || data.detail || t('errorMsg')
                         }
                     } catch (err) {
                         console.error(err)
-                        error.value = true
+                        error.value = t('errorMsg')
                     } finally {
                         loading.value = false
                     }

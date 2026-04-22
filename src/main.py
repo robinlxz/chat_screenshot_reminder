@@ -1,6 +1,7 @@
 import os
 import shutil
 import logging
+import urllib.parse
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -109,12 +110,15 @@ async def process_image_background(reminder_id: str, image_path: str, db: Sessio
 async def login(request: Request):
     data = await request.json()
     password = data.get("password")
-    username = data.get("username", "anonymous").lower()
+    username = data.get("username", "anonymous").strip().lower()
     
     if password == APP_PASSWORD:
         response = JSONResponse(content={"success": True})
         response.set_cookie(key="access_code", value=password, httponly=True, max_age=3600*24*30)
-        response.set_cookie(key="username", value=username, httponly=True, max_age=3600*24*30)
+        
+        # URL encode the username to support Chinese characters in cookies
+        encoded_username = urllib.parse.quote(username)
+        response.set_cookie(key="username", value=encoded_username, httponly=True, max_age=3600*24*30)
         return response
     return JSONResponse(status_code=401, content={"success": False, "message": "Invalid password"})
 
@@ -130,7 +134,7 @@ async def upload_image(request: Request, background_tasks: BackgroundTasks, file
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
     
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     
     # Save file
     timestamp = datetime.now().strftime("%Y%md%H%M%S")
@@ -158,7 +162,7 @@ async def upload_image(request: Request, background_tasks: BackgroundTasks, file
 
 @app.get("/api/stats")
 async def get_stats(request: Request, db: Session = Depends(get_db)):
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     if username != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
         
@@ -174,7 +178,7 @@ async def get_stats(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/api/reminders")
 async def get_reminders(request: Request, db: Session = Depends(get_db)):
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     
     query = db.query(Reminder)
     if username != "admin":
@@ -224,17 +228,17 @@ async def delete_reminder(id: str, db: Session = Depends(get_db)):
 # --- HTML Views ---
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     return templates.TemplateResponse(request=request, name="index.html", context={"username": username})
 
 @app.get("/stats", response_class=HTMLResponse)
 async def stats_dashboard(request: Request):
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     if username != "admin":
         return HTMLResponse(content="<h1>403 Forbidden</h1><p>You must be 'admin' to view this page.</p>", status_code=403)
     return templates.TemplateResponse(request=request, name="stats.html", context={"username": username})
 
 @app.get("/reminder/{id}", response_class=HTMLResponse)
 async def reminder_detail(request: Request, id: str):
-    username = request.cookies.get("username", "anonymous")
+    username = urllib.parse.unquote(request.cookies.get("username", "anonymous"))
     return templates.TemplateResponse(request=request, name="detail.html", context={"id": id, "username": username})
