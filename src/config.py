@@ -8,7 +8,7 @@ load_dotenv()
 # App Configuration
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 PORT = int(os.getenv("PORT", "8000"))
-HOST = os.getenv("HOST", "0.0.0.0")
+HOST = os.getenv("HOST", "127.0.0.1")
 ENABLE_DOCS = os.getenv("ENABLE_DOCS", "false").lower() == "true"
 
 # API Configuration

@@ -1,0 +1,15 @@
+[Unit]
+Description=Chat Screenshot Reminder Web Service
+After=network.target
+
+[Service]
+User=<deploy-user>
+WorkingDirectory=<project-dir>
+Environment="PATH=<project-dir>/venv/bin"
+EnvironmentFile=<project-dir>/.env
+ExecStart=<project-dir>/venv/bin/python <project-dir>/scripts/run_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
